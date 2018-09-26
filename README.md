@@ -2,6 +2,18 @@
 
 This project provides pagination and rich query functionalities over historical transaction data that official historyleveldb of hyperledger fabric lacks of. The basic idea is using CouchDB to store blockchain metadata instead of LevelDB, then pagination and rich query could be achieved by leveraging corresponding CouchDB features. This prototype source code is based on Hyperledger Fabric v1.2 release, and users could choose CouchDB or LevelDB as the HistoryDB according to their needs by setting environment variable.
 
+PS:
+Please ignore changes to the following files,
+`core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go`
+`core/scc/lscc/lscc.go`
+`examples/cluster/config/core.yaml`
+`integration/runner/testdata/core.yaml`
+`integration/world/testdata/peer0.org1.example.com-core.yaml`
+`integration/world/testdata/peer0.org2.example.com-core.yaml`
+`integration/world/testdata/peer1.org1.example.com-core.yaml`
+`integration/world/testdata/peer1.org2.example.com-core.yaml`
+`sampleconfig/core.yaml`
+
 ## How to use
 
 ### Prerequisites
