@@ -160,6 +160,12 @@ type ChaincodeStubInterface interface {
 	// update ledger, and should limit use to read-only chaincode operations.
 	GetHistoryForKey(key string) (HistoryQueryIteratorInterface, error)
 
+	// GetHistoryQueryResult performs a "rich" query against a history database, currently only support historycouchdb.
+	GetHistoryQueryResult(query string) (HistoryRichQueryIteratorInterface, error)
+
+	// GetHistoryForKeyPageEnabled returns a history of key values across time
+	GetHistoryForKeyPageEnabled(startKey, endKey string, skip int, descending bool) (HistoryQueryIteratorInterfaceWithMetaInfo, error)
+
 	// GetPrivateData returns the value of the specified `key` from the specified
 	// `collection`. Note that GetPrivateData doesn't read data from the
 	// private writeset, which has not been committed to the `collection`. In
@@ -292,6 +298,35 @@ type HistoryQueryIteratorInterface interface {
 
 	// Next returns the next key and value in the history query iterator.
 	Next() (*queryresult.KeyModification, error)
+}
+
+// HistoryQueryIteratorInterfaceWithMetaInfo  allows a chaincode to iterate over a set of
+// key/value pairs returned by a history query.
+type HistoryQueryIteratorInterfaceWithMetaInfo interface {
+	// Inherit HasNext() and Close()
+	CommonIteratorInterface
+
+	// Next returns the next key and value in the history query iterator.
+	Next() (*queryresult.KeyModification, error)
+
+	// GetTotalRows returns the TotalRows info
+	GetTotalRows() int
+
+	// GetOffset returns the offset info
+	GetOffset() int
+}
+
+// HistoryRichQueryIteratorInterface  allows a chaincode to iterate over a set of
+// key/value pairs returned by a history rich query.
+type HistoryRichQueryIteratorInterface interface {
+	// Inherit HasNext() and Close()
+	CommonIteratorInterface
+
+	// Next returns the next key and value in the history query iterator.
+	Next() (*queryresult.KeyModification, error)
+
+	// GetBookmark returns the bookmark for rich query
+	GetBookmark() string
 }
 
 // MockQueryIteratorInterface allows a chaincode to iterate over a set of

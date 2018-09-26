@@ -608,6 +608,106 @@ func (handler *Handler) handleGetHistoryForKey(key string, channelId string, txi
 	return nil, errors.Errorf("incorrect chaincode message %s received. Expecting %s or %s", responseMsg.Type, pb.ChaincodeMessage_RESPONSE, pb.ChaincodeMessage_ERROR)
 }
 
+func (handler *Handler) handleGetHistoryQueryResult(query string, channelId string, txid string) (*pb.QueryResponseWithMetaInfo, error) {
+	chaincodeLogger.Debug("Entered handleGetHistoryQueryResult")
+	// Create the channel on which to communicate the response from validating peer
+	var respChan chan pb.ChaincodeMessage
+	var err error
+	if respChan, err = handler.createChannel(channelId, txid); err != nil {
+		chaincodeLogger.Errorf("[%s] Another state request pending for this Txid. Cannot process.", shorttxid(txid))
+		return nil, err
+	}
+
+	defer handler.deleteChannel(channelId, txid)
+
+	// Send GET_HISTORY_FOR_KEY message to peer chaincode support
+	//we constructed a valid object. No need to check for error
+	payloadBytes, _ := proto.Marshal(&pb.GetHistoryQueryResult{Query: query})
+
+	msg := &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_HISTORY_QUERY_RESULT, Payload: payloadBytes, Txid: txid, ChannelId: channelId}
+	chaincodeLogger.Debugf("[%s] Sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_QUERY_RESULT)
+
+	var responseMsg pb.ChaincodeMessage
+
+	if responseMsg, err = handler.sendReceive(msg, respChan); err != nil {
+		chaincodeLogger.Errorf("[%s] error sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_QUERY_RESULT)
+		return nil, errors.Errorf("[%s] error sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_QUERY_RESULT)
+	}
+
+	if responseMsg.Type.String() == pb.ChaincodeMessage_RESPONSE.String() {
+		// Success response
+		chaincodeLogger.Debugf("[%s] Received %s. Successfully got range", shorttxid(responseMsg.Txid), pb.ChaincodeMessage_RESPONSE)
+
+		getHistoryQueryResultResponse := &pb.QueryResponseWithMetaInfo{}
+		if err = proto.Unmarshal(responseMsg.Payload, getHistoryQueryResultResponse); err != nil {
+			chaincodeLogger.Errorf("[%s] unmarshall error", shorttxid(responseMsg.Txid))
+			return nil, errors.Errorf("[%s] unmarshal error", shorttxid(responseMsg.Txid))
+		}
+
+		chaincodeLogger.Debug("Existing handleGetHistoryQueryResult")
+		return getHistoryQueryResultResponse, nil
+	}
+	if responseMsg.Type.String() == pb.ChaincodeMessage_ERROR.String() {
+		// Error response
+		chaincodeLogger.Errorf("[%s] Received %s", shorttxid(responseMsg.Txid), pb.ChaincodeMessage_ERROR)
+		return nil, errors.New(string(responseMsg.Payload[:]))
+	}
+
+	// Incorrect chaincode message received
+	chaincodeLogger.Errorf("Incorrect chaincode message %s received. Expecting %s or %s", responseMsg.Type, pb.ChaincodeMessage_RESPONSE, pb.ChaincodeMessage_ERROR)
+	return nil, errors.Errorf("incorrect chaincode message %s received. Expecting %s or %s", responseMsg.Type, pb.ChaincodeMessage_RESPONSE, pb.ChaincodeMessage_ERROR)
+}
+
+func (handler *Handler) handleGetHistoryForKeyPageEnabled(startKey, endKey string, skip int, descending bool, channelId string, txid string) (*pb.QueryResponseWithMetaInfo, error) {
+	chaincodeLogger.Debug("Entered handleGetHistoryForKeyPageEnabled")
+	// Create the channel on which to communicate the response from validating peer
+	var respChan chan pb.ChaincodeMessage
+	var err error
+	if respChan, err = handler.createChannel(channelId, txid); err != nil {
+		chaincodeLogger.Errorf("[%s] Another state request pending for this Txid. Cannot process.", shorttxid(txid))
+		return nil, err
+	}
+
+	defer handler.deleteChannel(channelId, txid)
+
+	// Send GET_HISTORY_FOR_KEY_PAGE_ENABLED message to peer chaincode support
+	//we constructed a valid object. No need to check for error
+	payloadBytes, _ := proto.Marshal(&pb.GetHistoryForKeyPageEnabled{StartKey: startKey, EndKey: endKey, Skip: int32(skip), Descending: descending})
+
+	msg := &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_GET_HISTORY_FOR_KEY_PAGE_ENABLED, Payload: payloadBytes, Txid: txid, ChannelId: channelId}
+	chaincodeLogger.Debugf("[%s] Sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_FOR_KEY_PAGE_ENABLED)
+
+	var responseMsg pb.ChaincodeMessage
+
+	if responseMsg, err = handler.sendReceive(msg, respChan); err != nil {
+		chaincodeLogger.Errorf("[%s] error sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_FOR_KEY_PAGE_ENABLED)
+		return nil, errors.Errorf("[%s] error sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_GET_HISTORY_FOR_KEY_PAGE_ENABLED)
+	}
+
+	if responseMsg.Type.String() == pb.ChaincodeMessage_RESPONSE.String() {
+		// Success response
+		chaincodeLogger.Debugf("[%s] Received %s. Successfully got range", shorttxid(responseMsg.Txid), pb.ChaincodeMessage_RESPONSE)
+
+		queryResultResponse := &pb.QueryResponseWithMetaInfo{}
+		if err = proto.Unmarshal(responseMsg.Payload, queryResultResponse); err != nil {
+			chaincodeLogger.Errorf("[%s] unmarshall error", shorttxid(responseMsg.Txid))
+			return nil, errors.Errorf("[%s] unmarshal error", shorttxid(responseMsg.Txid))
+		}
+
+		chaincodeLogger.Debug("Existing handleGetHistoryForKeyPageEnabled")
+		return queryResultResponse, nil
+	}
+	if responseMsg.Type.String() == pb.ChaincodeMessage_ERROR.String() {
+		// Error response
+		chaincodeLogger.Errorf("[%s] Received %s", shorttxid(responseMsg.Txid), pb.ChaincodeMessage_ERROR)
+		return nil, errors.New(string(responseMsg.Payload[:]))
+	}
+
+	// Incorrect chaincode message received
+	chaincodeLogger.Errorf("Incorrect chaincode message %s received. Expecting %s or %s", responseMsg.Type, pb.ChaincodeMessage_RESPONSE, pb.ChaincodeMessage_ERROR)
+	return nil, errors.Errorf("incorrect chaincode message %s received. Expecting %s or %s", responseMsg.Type, pb.ChaincodeMessage_RESPONSE, pb.ChaincodeMessage_ERROR)
+}
+
 func (handler *Handler) createResponse(status int32, payload []byte) pb.Response {
 	return pb.Response{Status: status, Payload: payload}
 }

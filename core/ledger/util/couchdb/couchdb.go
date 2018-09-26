@@ -94,6 +94,13 @@ type QueryResponse struct {
 	Docs    []json.RawMessage `json:"docs"`
 }
 
+//QueryResponseWithBookmark is used for processing REST query responses from CouchDB
+type QueryResponseWithBookmark struct {
+	Warning  string            `json:"warning"`
+	Bookmark string            `json:"bookmark"`
+	Docs     []json.RawMessage `json:"docs"`
+}
+
 // DocMetadata is used for capturing CouchDB document header info,
 // used to capture id, version, rev and determine if attachments are returned in the query from CouchDB
 type DocMetadata struct {
@@ -990,6 +997,227 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 
 }
 
+// RangeQueryResponseMetaInfo contains TotalRows and Offset info
+type RangeQueryResponseMetaInfo struct {
+	TotalRows int `json:"total_rows"`
+	Offset    int `json:"offset"`
+}
+
+// GetTotalRows return TotalRows
+func (m *RangeQueryResponseMetaInfo) GetTotalRows() int {
+	return m.TotalRows
+}
+
+// SetTotalRows set TotalRows
+func (m *RangeQueryResponseMetaInfo) SetTotalRows(totalRows int) {
+	if totalRows < 0 {
+		m.TotalRows = 0
+	} else {
+		m.TotalRows = totalRows
+	}
+}
+
+// GetOffset return Offset
+func (m *RangeQueryResponseMetaInfo) GetOffset() int {
+	return m.Offset
+}
+
+// SetOffset set Offset
+func (m *RangeQueryResponseMetaInfo) SetOffset(offset int) {
+	if offset < 0 {
+		m.Offset = 0
+	} else {
+		m.Offset = offset
+	}
+}
+
+// ReadDocRangeWithRangeQueryResponse method provides function to a range of documents based on the start and end keys
+func (dbclient *CouchDatabase) ReadDocRangeWithRangeQueryResponse(startKey, endKey string, limit, skip int, descending bool) (*[]QueryResult, *RangeQueryResponseMetaInfo, error) {
+	logger.Debugf("Entering ReadDocRangeWithRangeQueryResponse()  startKey=%s, endKey=%s, limit=%d, skip=%d, descending=%v", startKey, endKey, limit, skip, descending)
+
+	var results []QueryResult
+
+	rangeURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	if err != nil {
+		logger.Errorf("URL parse error: %s", err.Error())
+		return nil, nil, err
+	}
+	rangeURL.Path = dbclient.DBName + "/_all_docs"
+
+	queryParms := rangeURL.Query()
+	queryParms.Set("limit", strconv.Itoa(limit))
+	queryParms.Add("skip", strconv.Itoa(skip))
+	queryParms.Add("include_docs", "true")
+	queryParms.Add("inclusive_end", "false") // endkey should be exclusive to be consistent with goleveldb
+	if descending == true {
+		queryParms.Add("descending", "true")
+	} else {
+		queryParms.Add("descending", "false")
+	}
+
+	//Append the startKey if provided
+	if startKey != "" {
+		if startKey, err = encodeForJSON(startKey); err != nil {
+			return nil, nil, err
+		}
+		queryParms.Add("startkey", "\""+startKey+"\"")
+	}
+
+	//Append the endKey if provided
+	if endKey != "" {
+		var err error
+		if endKey, err = encodeForJSON(endKey); err != nil {
+			return nil, nil, err
+		}
+		queryParms.Add("endkey", "\""+endKey+"\"")
+	}
+
+	rangeURL.RawQuery = queryParms.Encode()
+
+	//get the number of retries
+	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, rangeURL.String(), nil, "", "", maxRetries, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer closeResponseBody(resp)
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		dump, err2 := httputil.DumpResponse(resp, true)
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+		logger.Debugf("%s", dump)
+	}
+
+	//handle as JSON document
+	jsonResponseRaw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var jsonResponse = &RangeQueryResponse{}
+	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
+	if err2 != nil {
+		return nil, nil, err2
+	}
+
+	logger.Debugf("Total Rows: %d, Offset: %d", jsonResponse.TotalRows, jsonResponse.Offset)
+
+	for _, row := range jsonResponse.Rows {
+
+		var docMetadata = &DocMetadata{}
+		err3 := json.Unmarshal(row.Doc, &docMetadata)
+		if err3 != nil {
+			return nil, nil, err3
+		}
+
+		if docMetadata.AttachmentsInfo != nil {
+
+			logger.Debugf("Adding JSON document and attachments for id: %s", docMetadata.ID)
+
+			couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			var addDocument = &QueryResult{docMetadata.ID, couchDoc.JSONValue, couchDoc.Attachments}
+			results = append(results, *addDocument)
+
+		} else {
+
+			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
+
+			var addDocument = &QueryResult{docMetadata.ID, row.Doc, nil}
+			results = append(results, *addDocument)
+
+		}
+
+	}
+
+	logger.Debug("Exiting ReadDocRangeWithRangeQueryResponse()")
+	// return &results, &RangeQueryResponseMetaInfo{TotalRows: jsonResponse.TotalRows, Offset: jsonResponse.Offset}, nil
+	return &results, &RangeQueryResponseMetaInfo{TotalRows: len(jsonResponse.Rows), Offset: jsonResponse.Offset}, nil
+}
+
+// GetRangeQueryResponseMetaInfo method provides function to query TotalRows and offset of a range of documents based on the start and end keys
+func (dbclient *CouchDatabase) GetRangeQueryResponseMetaInfo(startKey, endKey string, descending bool) (*RangeQueryResponseMetaInfo, error) {
+	logger.Debugf("Entering GetRangeQueryResponseMetaInfo()  startKey=%s, endKey=%s, descending=%v", startKey, endKey, descending)
+
+	rangeURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	if err != nil {
+		logger.Errorf("URL parse error: %s", err.Error())
+		return nil, err
+	}
+	rangeURL.Path = dbclient.DBName + "/_all_docs"
+
+	queryParms := rangeURL.Query()
+	queryParms.Set("limit", "0")
+	queryParms.Add("skip", "0")
+	queryParms.Add("include_docs", "false")
+	queryParms.Add("inclusive_end", "false") // endkey should be exclusive to be consistent with goleveldb
+
+	if descending == true {
+		queryParms.Add("descending", "true")
+	} else {
+		queryParms.Add("descending", "false")
+	}
+
+	//Append the startKey if provided
+	if startKey != "" {
+		if startKey, err = encodeForJSON(startKey); err != nil {
+			return nil, err
+		}
+		queryParms.Add("startkey", "\""+startKey+"\"")
+	}
+
+	//Append the endKey if provided
+	if endKey != "" {
+		var err error
+		if endKey, err = encodeForJSON(endKey); err != nil {
+			return nil, err
+		}
+		queryParms.Add("endkey", "\""+endKey+"\"")
+	}
+
+	rangeURL.RawQuery = queryParms.Encode()
+
+	//get the number of retries
+	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, rangeURL.String(), nil, "", "", maxRetries, true)
+	if err != nil {
+		return nil, err
+	}
+	defer closeResponseBody(resp)
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		dump, err2 := httputil.DumpResponse(resp, true)
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+		logger.Debugf("%s", dump)
+	}
+
+	//handle as JSON document
+	jsonResponseRaw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jsonResponse = &RangeQueryResponse{}
+	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	logger.Debugf("Total Rows: %d, Offset: %d", jsonResponse.TotalRows, jsonResponse.Offset)
+
+	logger.Debug("Exiting GetRangeQueryResponseMetaInfo()")
+	return &RangeQueryResponseMetaInfo{TotalRows: jsonResponse.TotalRows, Offset: jsonResponse.Offset}, nil
+}
+
 //DeleteDoc method provides function to delete a document from the database by id
 func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 
@@ -1107,6 +1335,86 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) (*[]QueryResult, err
 
 }
 
+//QueryDocumentsBookmarkEnabled method provides function for processing a query
+func (dbclient *CouchDatabase) QueryDocumentsBookmarkEnabled(query string) (*[]QueryResult, string, error) {
+
+	logger.Debugf("Entering QueryDocumentsBookmarkEnabled()  query=%s", query)
+
+	var results []QueryResult
+
+	queryURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	if err != nil {
+		logger.Errorf("URL parse error: %s", err.Error())
+		return nil, "", err
+	}
+
+	queryURL.Path = dbclient.DBName + "/_find"
+
+	//get the number of retries
+	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, queryURL.String(), []byte(query), "", "", maxRetries, true)
+	if err != nil {
+		return nil, "", err
+	}
+	defer closeResponseBody(resp)
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		dump, err2 := httputil.DumpResponse(resp, true)
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+		logger.Debugf("%s", dump)
+	}
+
+	//handle as JSON document
+	jsonResponseRaw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var jsonResponse = &QueryResponseWithBookmark{}
+
+	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
+	if err2 != nil {
+		return nil, "", err2
+	}
+
+	logger.Debugf("[QueryDocumentsBookmarkEnabled] jsonResponse.bookmark=%s", jsonResponse.Bookmark)
+
+	for _, row := range jsonResponse.Docs {
+
+		var docMetadata = &DocMetadata{}
+		err3 := json.Unmarshal(row, &docMetadata)
+		if err3 != nil {
+			return nil, "", err3
+		}
+
+		if docMetadata.AttachmentsInfo != nil {
+
+			logger.Debugf("Adding JSON docment and attachments for id: %s", docMetadata.ID)
+
+			couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
+			if err != nil {
+				return nil, "", err
+			}
+			var addDocument = &QueryResult{ID: docMetadata.ID, Value: couchDoc.JSONValue, Attachments: couchDoc.Attachments}
+			results = append(results, *addDocument)
+
+		} else {
+			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
+			var addDocument = &QueryResult{ID: docMetadata.ID, Value: row, Attachments: nil}
+
+			results = append(results, *addDocument)
+
+		}
+	}
+	logger.Debugf("Exiting QueryDocumentsBookmarkEnabled()")
+
+	return &results, jsonResponse.Bookmark, nil
+
+}
+
 // ListIndex method lists the defined indexes for a database
 func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 
@@ -1180,6 +1488,93 @@ func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 
 }
 
+// ListIndexFields method lists the fields of defined indexes for a database
+func (dbclient *CouchDatabase) ListIndexFields() ([]string, error) {
+
+	//IndexDefinition contains the definition for a couchdb index
+	type indexDefinition struct {
+		DesignDocument string          `json:"ddoc"`
+		Name           string          `json:"name"`
+		Type           string          `json:"type"`
+		Definition     json.RawMessage `json:"def"`
+	}
+
+	//ListIndexResponse contains the definition for listing couchdb indexes
+	type listIndexResponse struct {
+		TotalRows int               `json:"total_rows"`
+		Indexes   []indexDefinition `json:"indexes"`
+	}
+
+	logger.Debug("Entered ListIndexFields()")
+
+	indexURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	if err != nil {
+		logger.Errorf("URL parse error: %s", err.Error())
+		return nil, err
+	}
+
+	indexURL.Path = dbclient.DBName + "/_index/"
+
+	//get the number of retries
+	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
+	if err != nil {
+		return nil, err
+	}
+	defer closeResponseBody(resp)
+
+	//handle as JSON document
+	jsonResponseRaw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jsonResponse = &listIndexResponse{}
+
+	err2 := json.Unmarshal(jsonResponseRaw, jsonResponse)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	fieldsReg := regexp.MustCompile(`"fields":\s*\[(.*)\]`)
+	var results []string
+
+	for _, row := range jsonResponse.Indexes {
+
+		//if the DesignDocument does not begin with "_design/", then this is a system
+		//level index and is not meaningful and cannot be edited or deleted
+		designDoc := row.DesignDocument
+		s := strings.SplitAfterN(designDoc, "_design/", 2)
+		if len(s) > 1 {
+			indexStr := fmt.Sprintf("%s", row.Definition)
+
+			matchStrs := fieldsReg.FindStringSubmatch(indexStr)
+			if len(matchStrs) != 2 {
+				return nil, fmt.Errorf("Failed to get index fields, indexStr=%s", indexStr)
+			}
+			// results = strings.Split(strings.Replace(strings.Replace(matchStrs[1], "\"", "", -1), " ", "", -1), ",")
+			// results = append(results, strings.Split(strings.Replace(matchStrs[1], "\"", "", -1), ",")...)
+			targetIndexStr := strings.Replace(matchStrs[1], "},{", ",", -1)
+			var fieldsMap map[string]interface{}
+			err := json.Unmarshal([]byte(targetIndexStr), &fieldsMap)
+			if err == nil {
+				logger.Debugf("[ListIndexFields] fieldsMap=%v", fieldsMap)
+				for k := range fieldsMap {
+					results = append(results, k)
+				}
+			}
+		}
+
+	}
+
+	logger.Debugf("[ListIndexFields] results=%v", results)
+	logger.Debugf("Exiting ListIndexFields()")
+
+	return results, nil
+
+}
+
 // CreateIndex method provides a function creating an index
 func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndexResponse, error) {
 
@@ -1229,13 +1624,13 @@ func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndex
 
 	if couchDBReturn.Result == "created" {
 
-		logger.Infof("Created CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+		logger.Infof("Created CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 		return couchDBReturn, nil
 
 	}
 
-	logger.Infof("Updated CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+	logger.Infof("Updated CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 	return couchDBReturn, nil
 }

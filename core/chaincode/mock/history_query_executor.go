@@ -22,8 +22,151 @@ type HistoryQueryExecutor struct {
 		result1 commonledger.ResultsIterator
 		result2 error
 	}
+
+	GetHistoryQueryResultStub        func(namespace string, query string) (commonledger.ResultsIterator, error)
+	getHistoryQueryResultMutex       sync.RWMutex
+	getHistoryQueryResultArgsForCall []struct {
+		namespace string
+		query     string
+	}
+	getHistoryQueryResultReturns struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
+	getHistoryQueryResultReturnsOnCall map[int]struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
+
+	// GetHistoryForKeyPageEnabled
+	GetHistoryForKeyPageEnabledStub        func(namespace string, startKey, endKey string, skip int, descending bool) (commonledger.ResultsIterator, error)
+	getHistoryForKeyPageEnabledMutex       sync.RWMutex
+	getHistoryForKeyPageEnabledArgsForCall []struct {
+		namespace  string
+		startKey   string
+		endKey     string
+		skip       int
+		descending bool
+	}
+	getHistoryForKeyPageEnabledReturns struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
+	getHistoryForKeyPageEnabledReturnsOnCall map[int]struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
+
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+//
+func (fake *HistoryQueryExecutor) GetHistoryForKeyPageEnabled(namespace string, startKey, endKey string, skip int, descending bool) (commonledger.ResultsIterator, error) {
+	fake.getHistoryForKeyPageEnabledMutex.Lock()
+	ret, specificReturn := fake.getHistoryForKeyPageEnabledReturnsOnCall[len(fake.getHistoryForKeyPageEnabledArgsForCall)]
+	fake.getHistoryForKeyPageEnabledArgsForCall = append(fake.getHistoryForKeyPageEnabledArgsForCall, struct {
+		namespace  string
+		startKey   string
+		endKey     string
+		skip       int
+		descending bool
+	}{namespace, startKey, endKey, skip, descending})
+	fake.recordInvocation("GetHistoryForKeyPageEnabled", []interface{}{namespace, startKey, endKey, skip, descending})
+	fake.getHistoryForKeyPageEnabledMutex.Unlock()
+	if fake.GetHistoryForKeyPageEnabledStub != nil {
+		return fake.GetHistoryForKeyPageEnabledStub(namespace, startKey, endKey, skip, descending)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.getHistoryForKeyPageEnabledReturns.result1, fake.getHistoryForKeyPageEnabledReturns.result2
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryForKeyPageEnabledCallCount() int {
+	fake.getHistoryForKeyPageEnabledMutex.RLock()
+	defer fake.getHistoryForKeyPageEnabledMutex.RUnlock()
+	return len(fake.getHistoryForKeyPageEnabledArgsForCall)
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryForKeyPageEnabledArgsForCall(i int) (string, string, string, int, bool) {
+	fake.getHistoryForKeyPageEnabledMutex.RLock()
+	defer fake.getHistoryForKeyPageEnabledMutex.RUnlock()
+	return fake.getHistoryForKeyPageEnabledArgsForCall[i].namespace, fake.getHistoryForKeyPageEnabledArgsForCall[i].startKey, fake.getHistoryForKeyPageEnabledArgsForCall[i].endKey, fake.getHistoryForKeyPageEnabledArgsForCall[i].skip, fake.getHistoryForKeyPageEnabledArgsForCall[i].descending
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryForKeyPageEnabledReturns(result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetHistoryForKeyPageEnabledStub = nil
+	fake.getHistoryForKeyPageEnabledReturns = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryForKeyPageEnabledReturnsOnCall(i int, result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetHistoryForKeyPageEnabledStub = nil
+	if fake.getHistoryForKeyPageEnabledReturnsOnCall == nil {
+		fake.getHistoryForKeyPageEnabledReturnsOnCall = make(map[int]struct {
+			result1 commonledger.ResultsIterator
+			result2 error
+		})
+	}
+	fake.getHistoryForKeyPageEnabledReturnsOnCall[i] = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryQueryResult(namespace string, query string) (commonledger.ResultsIterator, error) {
+	fake.getHistoryQueryResultMutex.Lock()
+	ret, specificReturn := fake.getHistoryQueryResultReturnsOnCall[len(fake.getHistoryQueryResultArgsForCall)]
+	fake.getHistoryQueryResultArgsForCall = append(fake.getHistoryQueryResultArgsForCall, struct {
+		namespace string
+		query     string
+	}{namespace, query})
+	fake.recordInvocation("GetHistoryQueryResult", []interface{}{namespace, query})
+	fake.getHistoryQueryResultMutex.Unlock()
+	if fake.GetHistoryQueryResultStub != nil {
+		return fake.GetHistoryQueryResultStub(namespace, query)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.getHistoryQueryResultReturns.result1, fake.getHistoryQueryResultReturns.result2
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryQueryResultCallCount() int {
+	fake.getHistoryQueryResultMutex.RLock()
+	defer fake.getHistoryQueryResultMutex.RUnlock()
+	return len(fake.getHistoryQueryResultArgsForCall)
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryQueryResultArgsForCall(i int) (string, string) {
+	fake.getHistoryQueryResultMutex.RLock()
+	defer fake.getHistoryQueryResultMutex.RUnlock()
+	return fake.getHistoryQueryResultArgsForCall[i].namespace, fake.getHistoryQueryResultArgsForCall[i].query
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryQueryResultReturns(result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetHistoryQueryResultStub = nil
+	fake.getHistoryQueryResultReturns = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *HistoryQueryExecutor) GetHistoryQueryResultReturnsOnCall(i int, result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetHistoryQueryResultStub = nil
+	if fake.getHistoryQueryResultReturnsOnCall == nil {
+		fake.getHistoryQueryResultReturnsOnCall = make(map[int]struct {
+			result1 commonledger.ResultsIterator
+			result2 error
+		})
+	}
+	fake.getHistoryQueryResultReturnsOnCall[i] = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *HistoryQueryExecutor) GetHistoryForKey(namespace string, key string) (commonledger.ResultsIterator, error) {
@@ -83,6 +226,10 @@ func (fake *HistoryQueryExecutor) Invocations() map[string][][]interface{} {
 	defer fake.invocationsMutex.RUnlock()
 	fake.getHistoryForKeyMutex.RLock()
 	defer fake.getHistoryForKeyMutex.RUnlock()
+	fake.getHistoryQueryResultMutex.RLock()
+	defer fake.getHistoryQueryResultMutex.RUnlock()
+	fake.getHistoryForKeyPageEnabledMutex.RLock()
+	defer fake.getHistoryForKeyPageEnabledMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -3,5 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 FROM _BASE_NS_/fabric-baseimage:_BASE_TAG_
+
+ENV DEBIAN_FRONTEND noninteractive
+
 COPY payload/protoc-gen-go /usr/local/bin/
 ADD payload/gotools.tar.bz2 /usr/local/bin/

@@ -54,6 +54,18 @@ func (q *LevelHistoryDBQueryExecutor) GetHistoryForKey(namespace string, key str
 	return newHistoryScanner(compositeStartKey, namespace, key, dbItr, q.blockStore), nil
 }
 
+// GetHistoryQueryResult implements method in interface `ledger.HistoryQueryExecutor`
+func (q *LevelHistoryDBQueryExecutor) GetHistoryQueryResult(namespace string, query string) (commonledger.ResultsIterator, error) {
+	logger.Warning("[LevelHistoryDBQueryExecutor] GetHistoryQueryResult is not supported by historyleveldb")
+	return nil, errors.New("Unsupported method")
+}
+
+// GetHistoryForKeyPageEnabled implements method in interface `ledger.HistoryQueryExecutor`
+func (q *LevelHistoryDBQueryExecutor) GetHistoryForKeyPageEnabled(namespace, startKey, endKey string, skip int, descending bool) (commonledger.ResultsIterator, error) {
+	logger.Warning("[LevelHistoryDBQueryExecutor] GetHistoryForKeyPageEnabled is not supported by historyleveldb")
+	return nil, errors.New("Unsupported method")
+}
+
 //historyScanner implements ResultsIterator for iterating through history results
 type historyScanner struct {
 	compositePartialKey []byte //compositePartialKey includes namespace~key

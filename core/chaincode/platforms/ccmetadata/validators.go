@@ -25,6 +25,7 @@ const AllowedCharsCollectionName = "[A-Za-z0-9_-]+"
 var fileValidators = map[*regexp.Regexp]fileValidator{
 	regexp.MustCompile("^META-INF/statedb/couchdb/indexes/.*[.]json"):                                                couchdbIndexFileValidator,
 	regexp.MustCompile("^META-INF/statedb/couchdb/collections/" + AllowedCharsCollectionName + "/indexes/.*[.]json"): couchdbIndexFileValidator,
+	regexp.MustCompile("^META-INF/historydb/couchdb/indexes/.*[.]json"):                                              couchdbIndexFileValidator,
 }
 
 var collectionNameValid = regexp.MustCompile("^" + AllowedCharsCollectionName)

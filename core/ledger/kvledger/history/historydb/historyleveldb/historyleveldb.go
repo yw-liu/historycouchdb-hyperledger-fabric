@@ -137,6 +137,7 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 
 					//composite key for history records is in the form ns~key~blockNo~tranNo
 					compositeHistoryKey := historydb.ConstructCompositeHistoryKey(ns, writeKey, blockNo, tranNo)
+					// compositeHistoryKey := []byte(fmt.Sprintf("%s~%s~%v~%v", ns, writeKey, blockNo, tranNo))
 
 					// No value is required, write an empty byte array (emptyValue) since Put() of nil is not allowed
 					dbBatch.Put(compositeHistoryKey, emptyValue)
@@ -152,6 +153,8 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 	// add savepoint for recovery purpose
 	height := version.NewHeight(blockNo, tranNo)
 	dbBatch.Put(savePointKey, height.ToBytes())
+	// height := []byte(fmt.Sprintf("%v~%v", blockNo, tranNo))
+	// dbBatch.Put(savePointKey, height)
 
 	// write the block's history records and savepoint to LevelDB
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.

@@ -461,6 +461,7 @@ func isValidStatedbArtifactsTar(statedbArtifactsTar []byte) error {
 	// iterate through the files and validate
 	for _, archiveDirectoryFiles := range archiveFiles {
 		for _, fileEntry := range archiveDirectoryFiles {
+			logger.Debugf("[isValidStatedbArtifactsTar] fileEntry.FileHeader.Name = %v", fileEntry.FileHeader.Name)
 			indexData := fileEntry.FileContent
 			// Validation is based on the passed file name, e.g. META-INF/statedb/couchdb/indexes/indexname.json
 			err = ccmetadata.ValidateMetadataFile(fileEntry.FileHeader.Name, indexData)

@@ -83,6 +83,7 @@ func (c CheckInstantiationPolicyFunc) CheckInstantiationPolicy(name, version str
 // transactions initiated by chaincode.
 type QueryResponseBuilder interface {
 	BuildQueryResponse(txContext *TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponse, error)
+	BuildQueryResponseWithMetaInfo(txContext *TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponseWithMetaInfo, error)
 }
 
 // ChaincodeDefinitionGetter is responsible for retrieving a chaincode definition
@@ -201,6 +202,10 @@ func (h *Handler) handleMessageReadyState(msg *pb.ChaincodeMessage) error {
 		go h.HandleTransaction(msg, h.HandleGetQueryResult)
 	case pb.ChaincodeMessage_GET_HISTORY_FOR_KEY:
 		go h.HandleTransaction(msg, h.HandleGetHistoryForKey)
+	case pb.ChaincodeMessage_GET_HISTORY_QUERY_RESULT:
+		go h.HandleTransaction(msg, h.HandleGetHistoryQueryResult)
+	case pb.ChaincodeMessage_GET_HISTORY_FOR_KEY_PAGE_ENABLED:
+		go h.HandleTransaction(msg, h.HandleGetHistoryForKeyPageEnabled)
 	case pb.ChaincodeMessage_QUERY_STATE_NEXT:
 		go h.HandleTransaction(msg, h.HandleQueryStateNext)
 	case pb.ChaincodeMessage_QUERY_STATE_CLOSE:
@@ -709,6 +714,76 @@ func (h *Handler) HandleGetHistoryForKey(msg *pb.ChaincodeMessage, txContext *Tr
 	}
 
 	chaincodeLogger.Debugf("Got keys and values. Sending %s", pb.ChaincodeMessage_RESPONSE)
+	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: payloadBytes, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
+}
+
+// HandleGetHistoryQueryResult query to ledger historycouchdb
+func (h *Handler) HandleGetHistoryQueryResult(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
+	chaincodeLogger.Debug("Entered HandleGetHistoryQueryResult")
+	iterID := h.UUIDGenerator.New()
+	chaincodeName := h.ChaincodeName()
+
+	getHistoryQueryResult := &pb.GetHistoryQueryResult{}
+	err := proto.Unmarshal(msg.Payload, getHistoryQueryResult)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshal failed")
+	}
+
+	historyIter, err := txContext.HistoryQueryExecutor.GetHistoryQueryResult(chaincodeName, getHistoryQueryResult.Query)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	txContext.InitializeQueryContext(iterID, historyIter)
+	payload, err := h.QueryResponseBuilder.BuildQueryResponseWithMetaInfo(txContext, historyIter, iterID)
+	if err != nil {
+		txContext.CleanupQueryContext(iterID)
+		return nil, errors.WithStack(err)
+	}
+
+	payloadBytes, err := proto.Marshal(payload)
+	if err != nil {
+		txContext.CleanupQueryContext(iterID)
+		return nil, errors.Wrap(err, "marshal failed")
+	}
+
+	chaincodeLogger.Debugf("Got query result. Sending %s", pb.ChaincodeMessage_RESPONSE)
+	chaincodeLogger.Debug("Existing HandleGetHistoryQueryResult")
+	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: payloadBytes, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
+}
+
+// HandleGetHistoryForKeyPageEnabled query to ledger historycouchdb
+func (h *Handler) HandleGetHistoryForKeyPageEnabled(msg *pb.ChaincodeMessage, txContext *TransactionContext) (*pb.ChaincodeMessage, error) {
+	chaincodeLogger.Debug("Entered HandleGetHistoryForKeyPageEnabled")
+	iterID := h.UUIDGenerator.New()
+	chaincodeName := h.ChaincodeName()
+
+	getHistoryForKeyPageEnabled := &pb.GetHistoryForKeyPageEnabled{}
+	err := proto.Unmarshal(msg.Payload, getHistoryForKeyPageEnabled)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshal failed")
+	}
+
+	historyIter, err := txContext.HistoryQueryExecutor.GetHistoryForKeyPageEnabled(chaincodeName, getHistoryForKeyPageEnabled.StartKey, getHistoryForKeyPageEnabled.EndKey, int(getHistoryForKeyPageEnabled.Skip), getHistoryForKeyPageEnabled.Descending)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	txContext.InitializeQueryContext(iterID, historyIter)
+	payload, err := h.QueryResponseBuilder.BuildQueryResponseWithMetaInfo(txContext, historyIter, iterID)
+	if err != nil {
+		txContext.CleanupQueryContext(iterID)
+		return nil, errors.WithStack(err)
+	}
+
+	payloadBytes, err := proto.Marshal(payload)
+	if err != nil {
+		txContext.CleanupQueryContext(iterID)
+		return nil, errors.Wrap(err, "marshal failed")
+	}
+
+	chaincodeLogger.Debugf("Got query result. Sending %s", pb.ChaincodeMessage_RESPONSE)
+	chaincodeLogger.Debug("Existing HandleGetHistoryForKeyPageEnabled")
 	return &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_RESPONSE, Payload: payloadBytes, Txid: msg.Txid, ChannelId: msg.ChannelId}, nil
 }
 

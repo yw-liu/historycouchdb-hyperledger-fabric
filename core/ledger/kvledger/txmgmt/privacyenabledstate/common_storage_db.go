@@ -8,6 +8,7 @@ package privacyenabledstate
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/historycouchdb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
@@ -33,20 +36,29 @@ const (
 // CommonStorageDBProvider implements interface DBProvider
 type CommonStorageDBProvider struct {
 	statedb.VersionedDBProvider
+	historyDBProvider *historycouchdb.HistoryDBProvider
 }
 
 // NewCommonStorageDBProvider constructs an instance of DBProvider
 func NewCommonStorageDBProvider() (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
+	var historydbProvider *historycouchdb.HistoryDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
 		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(); err != nil {
 			return nil, err
 		}
+		if ledgerconfig.IfUseHistorycouchdb() {
+			historydbProvider = historycouchdb.NewHistoryDBProvider()
+			if historydbProvider == nil {
+				return nil, errors.New("[privacyenabledstate] NewCommonStorageDBProvider: Failed to create historydbProvider")
+			}
+		}
 	} else {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
-	return &CommonStorageDBProvider{vdbProvider}, nil
+
+	return &CommonStorageDBProvider{vdbProvider, historydbProvider}, nil
 }
 
 // GetDBHandle implements function from interface DBProvider
@@ -55,7 +67,16 @@ func (p *CommonStorageDBProvider) GetDBHandle(id string) (DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCommonStorageDB(vdb, id)
+
+	if ledgerconfig.IfUseHistorycouchdb() && ledgerconfig.IsCouchDBEnabled() {
+		hdb, err := p.historyDBProvider.GetDBHandle(id)
+		if err != nil {
+			return nil, err
+		}
+		return NewCommonStorageDB(vdb, hdb, id)
+	}
+
+	return NewCommonStorageDB(vdb, nil, id)
 }
 
 // Close implements function from interface DBProvider
@@ -67,12 +88,13 @@ func (p *CommonStorageDBProvider) Close() {
 // both the public and private data
 type CommonStorageDB struct {
 	statedb.VersionedDB
+	historyDB historydb.HistoryDB
 }
 
 // NewCommonStorageDB wraps a VersionedDB instance. The public data is managed directly by the wrapped versionedDB.
 // For managing the hashed data and private data, this implementation creates separate namespaces in the wrapped db
-func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerid string) (DB, error) {
-	return &CommonStorageDB{VersionedDB: vdb}, nil
+func NewCommonStorageDB(vdb statedb.VersionedDB, hdb historydb.HistoryDB, ledgerid string) (DB, error) {
+	return &CommonStorageDB{VersionedDB: vdb, historyDB: hdb}, nil
 }
 
 // IsBulkOptimizable implements corresponding function in interface DB
@@ -202,6 +224,7 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 // is acceptable since peer can continue in the committing role without the indexes. However, executing chaincode queries
 // may be affected, until a new chaincode with fixed indexes is installed and instantiated
 func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt.ChaincodeDefinition, dbArtifactsTar []byte) error {
+	logger.Debugf("Entered [HandleChaincodeDeploy]")
 
 	//Check to see if the interface for IndexCapable is implemented
 	indexCapable, ok := s.VersionedDB.(statedb.IndexCapable)
@@ -214,6 +237,7 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 	}
 
 	dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, indexCapable.GetDBType())
+	// dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, "couchdb")
 	if err != nil {
 		logger.Errorf("error during extracting db artifacts from tar for chaincode=[%s] on chain=[%s]. error=%s",
 			chaincodeDefinition, chaincodeDefinition.Name, err)
@@ -222,23 +246,41 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 	for directoryPath, archiveDirectoryEntries := range dbArtifacts {
 		// split the directory name
 		directoryPathArray := strings.Split(directoryPath, "/")
-		// process the indexes for the chain
-		if directoryPathArray[3] == "indexes" {
-			err := indexCapable.ProcessIndexesForChaincodeDeploy(chaincodeDefinition.Name, archiveDirectoryEntries)
-			if err != nil {
-				logger.Errorf(err.Error())
+		logger.Debugf("[HandleChaincodeDeploy] directoryPathArray=%v", directoryPathArray)
+
+		if directoryPathArray[1] == "statedb" {
+			// indexCapable, ok := s.VersionedDB.(statedb.IndexCapable)
+			// if !ok {
+			// 	return nil
+			// }
+
+			// process the indexes for the chain
+			if directoryPathArray[3] == "indexes" {
+				err := indexCapable.ProcessIndexesForChaincodeDeploy(chaincodeDefinition.Name, archiveDirectoryEntries)
+				if err != nil {
+					logger.Errorf(err.Error())
+				}
+				continue
 			}
-			continue
-		}
-		// check for the indexes directory for the collection
-		if directoryPathArray[3] == "collections" && directoryPathArray[5] == "indexes" {
-			collectionName := directoryPathArray[4]
-			err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
-				archiveDirectoryEntries)
-			if err != nil {
-				logger.Errorf(err.Error())
+			// check for the indexes directory for the collection
+			if directoryPathArray[3] == "collections" && directoryPathArray[5] == "indexes" {
+				collectionName := directoryPathArray[4]
+				err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
+					archiveDirectoryEntries)
+				if err != nil {
+					logger.Errorf(err.Error())
+				}
+			}
+		} else if (directoryPathArray[1] == "historydb") && ledgerconfig.IfUseHistorycouchdb() && ledgerconfig.IsCouchDBEnabled() {
+			if directoryPathArray[3] == "indexes" {
+				err := s.historyDB.(*historycouchdb.HistoryDB).ProcessIndexesForChaincodeDeploy(chaincodeDefinition.Name, archiveDirectoryEntries)
+				if err != nil {
+					logger.Errorf("Failed to create indexes for historydb: %v", err.Error())
+				}
+				continue
 			}
 		}
+
 	}
 	return nil
 }

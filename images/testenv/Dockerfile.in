@@ -4,6 +4,8 @@
 #
 FROM _NS_/fabric-buildenv:_TAG_
 
+ENV DEBIAN_FRONTEND noninteractive
+
 # fabric configuration locations
 ENV FABRIC_CFG_PATH /etc/hyperledger/fabric
 

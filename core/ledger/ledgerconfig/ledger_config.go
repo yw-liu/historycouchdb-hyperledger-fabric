@@ -37,6 +37,30 @@ const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 
+const confUseHistorycouchdb = "ledger.history.useHistorycouchdb"
+const confHistoryRecordsPerPage = "ledger.history.recordsPerPage"
+const confHistoryEnableRichQuery = "ledger.history.enableRichQuery"
+
+//IfHistoryRichQueryEnabled exposes the history.enableRichQuery variable
+func IfHistoryRichQueryEnabled() bool {
+	return viper.GetBool(confHistoryEnableRichQuery)
+}
+
+//GetHistoryRecordsPerPage exposes the history.RecordsPerPage variable
+func GetHistoryRecordsPerPage() int {
+	historyRecordsPerPage := viper.GetInt(confHistoryRecordsPerPage)
+	// if historyRecordsPerPage was unset, default to 10
+	if !viper.IsSet(confHistoryRecordsPerPage) {
+		historyRecordsPerPage = 10
+	}
+	return historyRecordsPerPage
+}
+
+//IfUseHistorycouchdb exposes the useHistorycouchdb variable
+func IfUseHistorycouchdb() bool {
+	return IsHistoryDBEnabled() && viper.GetBool(confUseHistorycouchdb)
+}
+
 // GetRootPath returns the filesystem path.
 // All ledger related contents are expected to be stored under this path
 func GetRootPath() string {

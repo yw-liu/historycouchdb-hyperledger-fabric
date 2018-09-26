@@ -9,6 +9,8 @@ import (
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
+// BuildQueryResponseWithMetaInfo(txContext *TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponseWithMetaInfo, error)
+
 type QueryResponseBuilder struct {
 	BuildQueryResponseStub        func(txContext *chaincode_test.TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponse, error)
 	buildQueryResponseMutex       sync.RWMutex
@@ -25,8 +27,78 @@ type QueryResponseBuilder struct {
 		result1 *pb.QueryResponse
 		result2 error
 	}
+
+	BuildQueryResponseWithMetaInfoStub        func(txContext *chaincode_test.TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponseWithMetaInfo, error)
+	buildQueryResponseWithMetaInfoMutex       sync.RWMutex
+	buildQueryResponseWithMetaInfoArgsForCall []struct {
+		txContext *chaincode_test.TransactionContext
+		iter      commonledger.ResultsIterator
+		iterID    string
+	}
+	buildQueryResponseWithMetaInfoReturns struct {
+		result1 *pb.QueryResponseWithMetaInfo
+		result2 error
+	}
+	buildQueryResponseWithMetaInfoReturnsOnCall map[int]struct {
+		result1 *pb.QueryResponseWithMetaInfo
+		result2 error
+	}
+
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *QueryResponseBuilder) BuildQueryResponseWithMetaInfo(txContext *chaincode_test.TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponseWithMetaInfo, error) {
+	fake.buildQueryResponseWithMetaInfoMutex.Lock()
+	ret, specificReturn := fake.buildQueryResponseWithMetaInfoReturnsOnCall[len(fake.buildQueryResponseWithMetaInfoArgsForCall)]
+	fake.buildQueryResponseWithMetaInfoArgsForCall = append(fake.buildQueryResponseWithMetaInfoArgsForCall, struct {
+		txContext *chaincode_test.TransactionContext
+		iter      commonledger.ResultsIterator
+		iterID    string
+	}{txContext, iter, iterID})
+	fake.recordInvocation("BuildQueryResponseWithMetaInfo", []interface{}{txContext, iter, iterID})
+	fake.buildQueryResponseWithMetaInfoMutex.Unlock()
+	if fake.BuildQueryResponseWithMetaInfoStub != nil {
+		return fake.BuildQueryResponseWithMetaInfoStub(txContext, iter, iterID)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.buildQueryResponseWithMetaInfoReturns.result1, fake.buildQueryResponseWithMetaInfoReturns.result2
+}
+
+func (fake *QueryResponseBuilder) BuildQueryResponseWithMetaInfoCallCount() int {
+	fake.buildQueryResponseWithMetaInfoMutex.RLock()
+	defer fake.buildQueryResponseWithMetaInfoMutex.RUnlock()
+	return len(fake.buildQueryResponseWithMetaInfoArgsForCall)
+}
+
+func (fake *QueryResponseBuilder) BuildQueryResponseWithMetaInfoArgsForCall(i int) (*chaincode_test.TransactionContext, commonledger.ResultsIterator, string) {
+	fake.buildQueryResponseWithMetaInfoMutex.RLock()
+	defer fake.buildQueryResponseWithMetaInfoMutex.RUnlock()
+	return fake.buildQueryResponseWithMetaInfoArgsForCall[i].txContext, fake.buildQueryResponseWithMetaInfoArgsForCall[i].iter, fake.buildQueryResponseWithMetaInfoArgsForCall[i].iterID
+}
+
+func (fake *QueryResponseBuilder) BuildQueryResponseWithMetaInfoReturns(result1 *pb.QueryResponseWithMetaInfo, result2 error) {
+	fake.BuildQueryResponseWithMetaInfoStub = nil
+	fake.buildQueryResponseWithMetaInfoReturns = struct {
+		result1 *pb.QueryResponseWithMetaInfo
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *QueryResponseBuilder) BuildQueryResponseWithMetaInfoReturnsOnCall(i int, result1 *pb.QueryResponseWithMetaInfo, result2 error) {
+	fake.BuildQueryResponseWithMetaInfoStub = nil
+	if fake.buildQueryResponseWithMetaInfoReturnsOnCall == nil {
+		fake.buildQueryResponseWithMetaInfoReturnsOnCall = make(map[int]struct {
+			result1 *pb.QueryResponseWithMetaInfo
+			result2 error
+		})
+	}
+	fake.buildQueryResponseWithMetaInfoReturnsOnCall[i] = struct {
+		result1 *pb.QueryResponseWithMetaInfo
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *QueryResponseBuilder) BuildQueryResponse(txContext *chaincode_test.TransactionContext, iter commonledger.ResultsIterator, iterID string) (*pb.QueryResponse, error) {
@@ -87,6 +159,10 @@ func (fake *QueryResponseBuilder) Invocations() map[string][][]interface{} {
 	defer fake.invocationsMutex.RUnlock()
 	fake.buildQueryResponseMutex.RLock()
 	defer fake.buildQueryResponseMutex.RUnlock()
+
+	fake.buildQueryResponseWithMetaInfoMutex.RLock()
+	defer fake.buildQueryResponseWithMetaInfoMutex.RUnlock()
+
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

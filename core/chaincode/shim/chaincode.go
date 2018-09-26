@@ -520,6 +520,15 @@ type CommonIterator struct {
 	currentLoc int
 }
 
+// CommonIteratorWithMetaInfo documentation can be found in interfaces.go
+type CommonIteratorWithMetaInfo struct {
+	handler    *Handler
+	channelId  string
+	txid       string
+	response   *pb.QueryResponseWithMetaInfo
+	currentLoc int
+}
+
 // StateQueryIterator documentation can be found in interfaces.go
 type StateQueryIterator struct {
 	*CommonIterator
@@ -528,6 +537,16 @@ type StateQueryIterator struct {
 // HistoryQueryIterator documentation can be found in interfaces.go
 type HistoryQueryIterator struct {
 	*CommonIterator
+}
+
+// HistoryQueryIteratorWithMetaInfo documentation can be found in interfaces.go
+type HistoryQueryIteratorWithMetaInfo struct {
+	*CommonIteratorWithMetaInfo
+}
+
+// HistoryRichQueryIterator documentation can be found in interfaces.go
+type HistoryRichQueryIterator struct {
+	*CommonIteratorWithMetaInfo
 }
 
 type resultType uint8
@@ -564,6 +583,27 @@ func (stub *ChaincodeStub) GetHistoryForKey(key string) (HistoryQueryIteratorInt
 		return nil, err
 	}
 	return &HistoryQueryIterator{CommonIterator: &CommonIterator{stub.handler, stub.ChannelId, stub.TxID, response, 0}}, nil
+}
+
+// GetHistoryQueryResult documentation can be found in interfaces.go
+func (stub *ChaincodeStub) GetHistoryQueryResult(query string) (HistoryRichQueryIteratorInterface, error) {
+	chaincodeLogger.Debug("Entered GetHistoryQueryResult")
+	response, err := stub.handler.handleGetHistoryQueryResult(query, stub.ChannelId, stub.TxID)
+	if err != nil {
+		chaincodeLogger.Debug("GetHistoryQueryResult got error from handleGetHistoryQueryResult")
+		return nil, err
+	}
+	chaincodeLogger.Debug("Existing GetHistoryQueryResult")
+	return &HistoryRichQueryIterator{CommonIteratorWithMetaInfo: &CommonIteratorWithMetaInfo{stub.handler, stub.ChannelId, stub.TxID, response, 0}}, nil
+}
+
+// GetHistoryForKeyPageEnabled documentation can be found in interfaces.go
+func (stub *ChaincodeStub) GetHistoryForKeyPageEnabled(startKey, endKey string, skip int, descending bool) (HistoryQueryIteratorInterfaceWithMetaInfo, error) {
+	response, err := stub.handler.handleGetHistoryForKeyPageEnabled(startKey, endKey, skip, descending, stub.ChannelId, stub.TxID)
+	if err != nil {
+		return nil, err
+	}
+	return &HistoryQueryIteratorWithMetaInfo{CommonIteratorWithMetaInfo: &CommonIteratorWithMetaInfo{stub.handler, stub.ChannelId, stub.TxID, response, 0}}, nil
 }
 
 //CreateCompositeKey documentation can be found in interfaces.go
@@ -657,6 +697,131 @@ func (iter *HistoryQueryIterator) Next() (*queryresult.KeyModification, error) {
 	} else {
 		return nil, err
 	}
+}
+
+func (iter *HistoryQueryIteratorWithMetaInfo) Next() (*queryresult.KeyModification, error) {
+	if result, err := iter.nextResult(HISTORY_QUERY_RESULT); err == nil {
+		return result.(*queryresult.KeyModification), err
+	} else {
+		return nil, err
+	}
+}
+
+// GetTotalRows returns the TotalRows info
+func (iter *HistoryQueryIteratorWithMetaInfo) GetTotalRows() int {
+	return iter.response.GetTotalRows()
+}
+
+// GetOffset returns the offset info
+func (iter *HistoryQueryIteratorWithMetaInfo) GetOffset() int {
+	return iter.response.GetOffset()
+}
+
+////
+//
+////
+func (iter *HistoryRichQueryIterator) Next() (*queryresult.KeyModification, error) {
+	if result, err := iter.nextResult(HISTORY_QUERY_RESULT); err == nil {
+		return result.(*queryresult.KeyModification), err
+	} else {
+		return nil, err
+	}
+}
+
+// GetTotalRows returns the TotalRows
+func (iter *HistoryRichQueryIterator) GetTotalRows() int {
+	return iter.response.GetTotalRows()
+}
+
+// GetOffset returns the offset
+func (iter *HistoryRichQueryIterator) GetOffset() int {
+	return iter.response.GetOffset()
+}
+
+// GetBookmark returns the bookmark
+func (iter *HistoryRichQueryIterator) GetBookmark() string {
+	return iter.response.GetBookmark()
+}
+
+// HasNext documentation can be found in interfaces.go
+func (iter *CommonIteratorWithMetaInfo) HasNext() bool {
+	if iter.currentLoc < len(iter.response.Results) || iter.response.HasMore {
+		return true
+	}
+	return false
+}
+
+// getResultsFromBytes deserializes QueryResult and return either a KV struct
+// or KeyModification depending on the result type (i.e., state (range/execute)
+// query, history query). Note that commonledger.QueryResult is an empty golang
+// interface that can hold values of any type.
+func (iter *CommonIteratorWithMetaInfo) getResultFromBytes(queryResultBytes *pb.QueryResultBytes,
+	rType resultType) (commonledger.QueryResult, error) {
+
+	if rType == STATE_QUERY_RESULT {
+		stateQueryResult := &queryresult.KV{}
+		if err := proto.Unmarshal(queryResultBytes.ResultBytes, stateQueryResult); err != nil {
+			return nil, errors.Wrap(err, "error unmarshaling result from bytes")
+		}
+		return stateQueryResult, nil
+
+	} else if rType == HISTORY_QUERY_RESULT {
+		historyQueryResult := &queryresult.KeyModification{}
+		if err := proto.Unmarshal(queryResultBytes.ResultBytes, historyQueryResult); err != nil {
+			return nil, err
+		}
+		return historyQueryResult, nil
+	}
+	return nil, errors.New("wrong result type")
+}
+
+func (iter *CommonIteratorWithMetaInfo) fetchNextQueryResult() error {
+	// if response, err := iter.handler.handleQueryStateNextWithMetaInfo(iter.response.Id, iter.channelId, iter.txid); err == nil {
+	if response, err := iter.handler.handleQueryStateNext(iter.response.Id, iter.channelId, iter.txid); err == nil {
+		iter.currentLoc = 0
+		iter.response = &pb.QueryResponseWithMetaInfo{Results: response.Results, HasMore: response.HasMore, Id: response.Id, TotalRows: iter.response.TotalRows, Offset: iter.response.Offset, Bookmark: iter.response.Bookmark} //response
+		return nil
+	} else {
+		return err
+	}
+}
+
+// nextResult returns the next QueryResult (i.e., either a KV struct or KeyModification)
+// from the state or history query iterator. Note that commonledger.QueryResult is an
+// empty golang interface that can hold values of any type.
+func (iter *CommonIteratorWithMetaInfo) nextResult(rType resultType) (commonledger.QueryResult, error) {
+	if iter.currentLoc < len(iter.response.Results) {
+		// On valid access of an element from cached results
+		queryResult, err := iter.getResultFromBytes(iter.response.Results[iter.currentLoc], rType)
+		if err != nil {
+			chaincodeLogger.Errorf("Failed to decode query results: %+v", err)
+			return nil, err
+		}
+		iter.currentLoc++
+
+		if iter.currentLoc == len(iter.response.Results) && iter.response.HasMore {
+			// On access of last item, pre-fetch to update HasMore flag
+			if err = iter.fetchNextQueryResult(); err != nil {
+				chaincodeLogger.Errorf("Failed to fetch next results: %+v", err)
+				return nil, err
+			}
+		}
+
+		return queryResult, err
+	} else if !iter.response.HasMore {
+		// On call to Next() without check of HasMore
+		return nil, errors.New("no such key")
+	}
+
+	// should not fall through here
+	// case: no cached results but HasMore is true.
+	return nil, errors.New("invalid iterator state")
+}
+
+// Close documentation can be found in interfaces.go
+func (iter *CommonIteratorWithMetaInfo) Close() error {
+	_, err := iter.handler.handleQueryStateClose(iter.response.Id, iter.channelId, iter.txid)
+	return err
 }
 
 // HasNext documentation can be found in interfaces.go

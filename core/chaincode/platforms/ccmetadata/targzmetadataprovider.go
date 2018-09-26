@@ -21,7 +21,8 @@ import (
 //implement). Currently it treats only statedb metadata but will be generalized in future
 //to allow for arbitrary metadata to be packaged with the chaincode.
 const (
-	ccPackageStatedbDir = "META-INF/statedb/"
+	ccPackageStatedbDir   = "META-INF/statedb/"
+	ccPackageHistorydbDir = "META-INF/historydb/"
 )
 
 //TargzMetadataProvider provides Metadata from chaincode packaged in Targz format
@@ -78,7 +79,13 @@ func (tgzProv *TargzMetadataProvider) GetMetadataAsTarEntries() ([]byte, error) 
 			return nil, err
 		}
 
-		if !strings.HasPrefix(header.Name, ccPackageStatedbDir) {
+		logger.Debugf("[ccmetadata][TargzMetadataProvider][GetMetadataAsTarEntries] header.Name=%v", header.Name)
+
+		// if !strings.HasPrefix(header.Name, ccPackageStatedbDir) {
+		// 	continue
+		// }
+
+		if !(strings.HasPrefix(header.Name, ccPackageStatedbDir) || strings.HasPrefix(header.Name, ccPackageHistorydbDir)) {
 			continue
 		}
 

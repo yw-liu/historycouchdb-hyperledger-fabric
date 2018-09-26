@@ -36,6 +36,8 @@ message ChaincodeMessage {
         QUERY_STATE_CLOSE = 17;
         KEEPALIVE = 18;
         GET_HISTORY_FOR_KEY = 19;
+        GET_HISTORY_QUERY_RESULT = 20;
+        GET_HISTORY_FOR_KEY_PAGE_ENABLED = 21;
     }
 
     Type type = 1;
@@ -88,6 +90,17 @@ message GetHistoryForKey {
     string key = 1;
 }
 
+message GetHistoryQueryResult {
+    string query = 1;
+}
+
+message GetHistoryForKeyPageEnabled {
+    string startKey = 1;
+    string endKey = 2;
+    int32 skip = 3;
+    bool descending = 4;
+}
+
 message QueryStateNext {
     string id = 1;
 }
@@ -104,6 +117,15 @@ message QueryResponse {
     repeated QueryResultBytes results = 1;
     bool has_more = 2;
     string id = 3;
+}
+
+message QueryResponseWithMetaInfo {
+    repeated QueryResultBytes results = 1;
+    bool has_more = 2;
+    string id = 3;
+    int32 total_rows = 4;
+    int32 offset = 5;
+    string bookmark = 6;
 }
 
 // Interface that provides support to chaincode execution. ChaincodeContext
