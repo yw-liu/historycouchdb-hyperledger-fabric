@@ -4,14 +4,23 @@ This project provides pagination and rich query functionalities over historical 
 
 PS:
 Please ignore changes to the following files,
+
 `core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go`
+
 `core/scc/lscc/lscc.go`
+
 `examples/cluster/config/core.yaml`
+
 `integration/runner/testdata/core.yaml`
+
 `integration/world/testdata/peer0.org1.example.com-core.yaml`
+
 `integration/world/testdata/peer0.org2.example.com-core.yaml`
+
 `integration/world/testdata/peer1.org1.example.com-core.yaml`
+
 `integration/world/testdata/peer1.org2.example.com-core.yaml`
+
 `sampleconfig/core.yaml`
 
 ## How to use
